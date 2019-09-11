@@ -218,7 +218,9 @@ in is a reference to the data array sent in
 
 */
 $helpers['set'] = function($options) use (&$in) {
-	$in['html_'.$options['hash']['name']] = $options['hash']['value'];
+	$prefix = (isset($options['hash']['prefix'])) ? $options['hash']['prefix'] : '';
+
+	$in[$prefix.$options['hash']['name']] = $options['hash']['value'];
 
 	return '';
 };
@@ -229,7 +231,9 @@ _this is a the data array sent in
 {{get name="age"}}
 */
 $helpers['get'] = function($options) {
-	return $options['_this']['html_'.$options['hash']['name']];
+	$prefix = (isset($options['hash']['prefix'])) ? $options['hash']['prefix'] : '';
+
+	return $options['_this'][$prefix.$options['hash']['name']];
 };
 
 /*

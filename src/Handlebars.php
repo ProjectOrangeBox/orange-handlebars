@@ -40,8 +40,6 @@ namespace Handlebars;
 *
 **/
 
-use errorHandler\Exception;
-use Example;
 use Handlebars\Add;
 use LightnCandy\LightnCandy;
 
@@ -55,13 +53,13 @@ class Handlebars {
 
 	protected $defaultConfig = [];
 
-	public $alwaysCompile; /* always compile in developer mode */
+	public $forceCompile; /* always compile in developer mode */
 	public $templatePrefix; /* service locator prefix */
 	public $pluginPrefix; /* service locator prefix */
+	public $cachePrefix; /* prefix cached values with */
 	public $cacheFolder; /* where to store the compiled templates - a source code managed location is usually a good place */
 	public $delimiters; /* the handlebars delimiters */
 	public $flags; /* lightncandy handlebars compiler flags https://github.com/zordius/lightncandy#compile-options */
-	public $cachePrefix; /* prefix cached values with */
 
 	/**
 	 * Constructor - Sets Handlebars Preferences
@@ -77,13 +75,13 @@ class Handlebars {
 
 		/* values and there defaults */
 		$this->defaultConfig = [
-			'alwaysCompile'=>(env('DEBUG') == 'development'), /* boolean */
+			'forceCompile'=>(env('DEBUG') == 'development'), /* boolean */
 			'templatePrefix'=>'hbs-template-', /* string */
 			'pluginPrefix'=>'hbs-plugin-', /* string */
+			'cachePrefix'=>'hbs.', /* string */
 			'cacheFolder'=>path('{cache}handlebars'), /* string */
 			'delimiters'=>['{{','}}'], /* array */
 			'flags'=>LightnCandy::FLAG_ERROR_EXCEPTION | LightnCandy::FLAG_HANDLEBARS | LightnCandy::FLAG_HANDLEBARSJS | LightnCandy::FLAG_BESTPERFORMANCE, /* integer */
-			'cachePrefix'=>'hbs.', /* string */
 		];
 
 		$keys = \array_keys($this->defaultConfig);
@@ -110,8 +108,9 @@ class Handlebars {
 	 * @param	bool
 	 * @return	string
 	 */
-	public function parse(string $templateFile,array $data = [],bool $return = false) {
-		return $this->hbsRun($this->hbsParse($templateFile,true),$data,$return);
+	public function parse(string $templateFile,array $data = [],bool $return = false) : string
+	{
+		return $this->hbsRun($this->hbsParse($templateFile,true),$data,!$return);
 	}
 
 	/**
@@ -125,8 +124,9 @@ class Handlebars {
 	 * @param	bool
 	 * @return	string
 	 */
-	public function parse_string(string $templateStr,array $data = [],bool $return = false) {
-		return $this->hbsRun($this->hbsParse($templateStr,false),$data,$return);
+	public function parse_string(string $templateStr,array $data = [],bool $return = false) : string
+	{
+		return $this->hbsRun($this->hbsParse($templateStr,false),$data,!$return);
 	}
 
 	/*
@@ -136,7 +136,8 @@ class Handlebars {
 	* @param string
 	* @return object (this)
 	*/
-	public function set_delimiters(/* string|array */ $l = '{{',string $r = '}}') {
+	public function set_delimiters(/* string|array */ $l = '{{',string $r = '}}') : Handlebars
+	{
 		/* set delimiters */
 		$this->delimiters = (is_array($l)) ? $l : [$l,$r];
 
@@ -167,6 +168,7 @@ class Handlebars {
 			'helpers'=>$this->plugins, /* add this to the compiled file for reference */
 			'renderex'=>'/* '.$comment.' compiled @ '.date('Y-m-d h:i:s e').' */', /* added to compiled PHP */
 			'partialresolver'=>function($context,$name) { /* include / partial handler */
+
 				/* default */
 				$template = '<!-- template "'.$name.'" not found !>';
 
@@ -214,13 +216,20 @@ class Handlebars {
 		return atomic_file_put_contents($compiledFile,'<?php '.$templatePhp.'?>');
 	}
 
+	/**
+	 * hbsParse
+	 *
+	 * @param string $template
+	 * @param bool $isFile
+	 * @return void
+	 */
 	public function hbsParse(string $template,bool $isFile) : string
 	{
 		/* build the compiled file path */
 		$compiledFile = $this->cacheFolder.'/'.md5($template).'.php';
 
 		/* always compile in development or not save or compile if doesn't exist */
-		if ($this->alwaysCompile || !file_exists($compiledFile)) {
+		if ($this->forceCompile || !file_exists($compiledFile)) {
 			/* compile the template as either file or string */
 			if ($isFile) {
 				$source = $this->fileGetContents($this->findTemplate($template));
@@ -236,7 +245,15 @@ class Handlebars {
 		return $compiledFile;
 	}
 
-	public function hbsRun(string $compiledFile,array $data,bool $return) : string
+	/**
+	 * hbsRun
+	 *
+	 * @param string $compiledFile
+	 * @param array $data
+	 * @param bool $appendOutput
+	 * @return void
+	 */
+	public function hbsRun(string $compiledFile,array $data,bool $appendOutput) : string
 	{
 		/* did we find this template? */
 		if (!file_exists($compiledFile)) {
@@ -255,25 +272,28 @@ class Handlebars {
 		/* send data into the magic void... */
 		$output = $templatePHP($data);
 
-		/* if not return append to output */
-		if (!$return) {
+		/* Should we append to output? */
+		if ($appendOutput) {
 			$this->CIOUTPUT->append_output($output);
 		}
 
 		return $output;
 	}
 
+	/**
+	 * loadHelpers
+	 *
+	 * @return void
+	 */
 	protected function loadHelpers() : void
 	{
 		$cacheFile = $this->cacheFolder.'/handlebar.helpers.php';
 
-		if (!file_exists($cacheFile) || $this->alwaysCompile) {
+		if (!file_exists($cacheFile) || $this->forceCompile) {
 			$combined  = '<?php'.PHP_EOL.'/*'.PHP_EOL.'DO NOT MODIFY THIS FILE'.PHP_EOL.'Written: '.date('Y-m-d H:i:s T').PHP_EOL.'*/'.PHP_EOL.PHP_EOL;
 
 			/* find all of the plugin "services" */
-			$services = \orange::loadFileConfig('services');
-
-			foreach ($services as $service=>$path) {
+			foreach (\orange::loadFileConfig('services') as $service=>$path) {
 				/* is this a handlebars plugin? */
 				if (substr($service,0,strlen($this->pluginPrefix))== $this->pluginPrefix) {
 					$combined .= trim(str_replace(['<?php','<?'],'/* Start: '.$path.' */',trim($this->fileGetContents($path)))).PHP_EOL.'/* End: '.$path.' */'.PHP_EOL.PHP_EOL;
@@ -304,7 +324,7 @@ class Handlebars {
 	 */
 	protected function fileGetContents(string $file) : string
 	{
-		$absolutePath = __ROOT__.'/'.$file;
+		$absolutePath = __ROOT__.$file;
 
 		if (!\file_exists($absolutePath)) {
 			throw new \Exception('Can not location the file "'.$absolutePath.'".');
@@ -362,8 +382,6 @@ class Handlebars {
 	{{q:cache_demo cache="5"}}
 
 	time is in minutes
-
-	is the hash cache set and we aren't in alwaysCompile
 	*/
 	static protected function cacheSet(array $options,$output) {
 		return ((int)$options['hash']['cache'] > 0 && (env('DEBUG') != 'development')) ? ci('cache')->save(ci('handlebars')->cachePrefix.md5(json_encode($options)),$output) : false;
