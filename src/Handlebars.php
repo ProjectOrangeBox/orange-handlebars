@@ -81,7 +81,7 @@ class Handlebars {
 			'cachePrefix'=>'hbs.', /* string */
 			'cacheFolder'=>path('{cache}handlebars'), /* string */
 			'delimiters'=>['{{','}}'], /* array */
-			'flags'=>LightnCandy::FLAG_ERROR_EXCEPTION | LightnCandy::FLAG_HANDLEBARS | LightnCandy::FLAG_HANDLEBARSJS | LightnCandy::FLAG_BESTPERFORMANCE, /* integer */
+			'flags'=>LightnCandy::FLAG_ERROR_EXCEPTION | LightnCandy::FLAG_HANDLEBARS | LightnCandy::FLAG_HANDLEBARSJS | LightnCandy::FLAG_BESTPERFORMANCE | LightnCandy::FLAG_RUNTIMEPARTIAL, /* integer */
 		];
 
 		$keys = \array_keys($this->defaultConfig);
@@ -168,7 +168,6 @@ class Handlebars {
 			'helpers'=>$this->plugins, /* add this to the compiled file for reference */
 			'renderex'=>'/* '.$comment.' compiled @ '.date('Y-m-d h:i:s e').' */', /* added to compiled PHP */
 			'partialresolver'=>function($context,$name) { /* include / partial handler */
-
 				/* default */
 				$template = '<!-- template "'.$name.'" not found !>';
 

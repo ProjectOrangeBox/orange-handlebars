@@ -211,16 +211,16 @@ $helpers['is_odd'] = function($value,$options) {
 };
 
 /*
-in is a reference to the data array sent in
+$in is a reference to the data array sent in
 
 {{set name="age" value=page_title}}
 {{set name="foo" value="bar"}}
 
 */
 $helpers['set'] = function($options) use (&$in) {
-	$prefix = (isset($options['hash']['prefix'])) ? $options['hash']['prefix'] : '';
+	//$in[$options['hash']['name']] = $options['hash']['value'];
 
-	$in[$prefix.$options['hash']['name']] = $options['hash']['value'];
+	$in = array_replace($in,$options['hash']);
 
 	return '';
 };
@@ -231,9 +231,7 @@ _this is a the data array sent in
 {{get name="age"}}
 */
 $helpers['get'] = function($options) {
-	$prefix = (isset($options['hash']['prefix'])) ? $options['hash']['prefix'] : '';
-
-	return $options['_this'][$prefix.$options['hash']['name']];
+	return $options['_this'][$options['hash']['name']];
 };
 
 /*
