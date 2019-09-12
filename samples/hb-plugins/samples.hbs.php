@@ -74,6 +74,8 @@ $helpers['if_gt'] = function($value1,$value2,$options) {
 	} elseif ($options['inverse'] instanceof \Closure) {
 		$return = $options['inverse']();
 	}
+
+	return $return;
 };
 
 $helpers['if_lt'] = function($value1,$value2,$options) {
@@ -82,6 +84,8 @@ $helpers['if_lt'] = function($value1,$value2,$options) {
 	} elseif ($options['inverse'] instanceof \Closure) {
 		$return = $options['inverse']();
 	}
+
+	return $return;
 };
 
 $helpers['if_ne'] = function($value1,$value2,$options) {
@@ -90,6 +94,8 @@ $helpers['if_ne'] = function($value1,$value2,$options) {
 	} elseif ($options['inverse'] instanceof \Closure) {
 		$return = $options['inverse']();
 	}
+
+	return $return;
 };
 
 $helpers['if_eq'] = function($value1,$value2,$options) {
@@ -98,6 +104,8 @@ $helpers['if_eq'] = function($value1,$value2,$options) {
 	} elseif ($options['inverse'] instanceof \Closure) {
 		$return = $options['inverse']();
 	}
+
+	return $return;
 };
 
 $helpers['iif'] = function($value1,$op,$value2,$options) {
@@ -213,9 +221,7 @@ $helpers['is_odd'] = function($value,$options) {
 /*
 $in is a reference to the data array sent in
 
-{{set name="age" value=page_title}}
-{{set name="foo" value="bar"}}
-
+{{set age="28" name=page_title food="pizza" }}
 */
 $helpers['set'] = function($options) use (&$in) {
 	//$in[$options['hash']['name']] = $options['hash']['value'];
@@ -230,7 +236,7 @@ _this is a the data array sent in
 
 {{get name="age"}}
 */
-$helpers['get'] = function($options) {
+$helpers['get_unused'] = function($options) {
 	return $options['_this'][$options['hash']['name']];
 };
 
