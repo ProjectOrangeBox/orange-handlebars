@@ -70,14 +70,13 @@ class Handlebars
 	 *
 	 * @param	array	$userConfig = array()
 	 */
-	public function __construct(array $userConfig = [])
+	public function __construct(array $config = [])
 	{
 		$this->CIOUTPUT = &get_instance()->output;
 
 		$this->add = new Add($this);
 
-		/* values and there defaults */
-		$this->defaultConfig = [
+		$requiredDefaults = [
 			'forceCompile' => (env('DEBUG') == 'development'), /* boolean */
 			'templatePrefix' => 'hbs-template-', /* string */
 			'pluginPrefix' => 'hbs-plugin-', /* string */
@@ -87,13 +86,7 @@ class Handlebars
 			'flags' => LightnCandy::FLAG_ERROR_EXCEPTION | LightnCandy::FLAG_HANDLEBARS | LightnCandy::FLAG_HANDLEBARSJS | LightnCandy::FLAG_BESTPERFORMANCE | LightnCandy::FLAG_RUNTIMEPARTIAL, /* integer */
 		];
 
-		$keys = \array_keys($this->defaultConfig);
-
-		foreach (\array_replace($this->defaultConfig, $userConfig) as $key => $value) {
-			if (\in_array($key, $keys)) {
-				$this->$key = $value;
-			}
-		}
+		$this->config = ci('config')->merged('handlebars',$requiredDefaults,$config);
 
 		$this->cacheFolder = $this->makeCacheFolder($this->cacheFolder);
 
