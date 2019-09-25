@@ -37,7 +37,7 @@ namespace Handlebars;
  * 	path() - combined a config file key/value with some {magic} find and replace
  *  env()
  * 	atomic_file_put_contents() - atomic version of file_put_contents()
- *	loadFileConfig()
+ *	ci('config')->item(...)
  *
  **/
 
@@ -89,6 +89,9 @@ class Handlebars
 		$this->config = ci('config')->merged('handlebars',$requiredDefaults,$config);
 
 		$this->cacheFolder = $this->makeCacheFolder($this->cacheFolder);
+
+		ci('servicelocator')->addServicePrefix('hbsPlugin',$this->config['pluginPrefix']);
+		ci('servicelocator')->addServicePrefix('hbsTemplate',$this->config['templatePrefix']);
 
 		$this->loadHelpers();
 	}
@@ -192,9 +195,7 @@ class Handlebars
 	*/
 	public function findTemplate(string $name): string
 	{
-		$key = $this->templatePrefix . $name;
-
-		return (\key_exists($key, $this->templates)) ? $this->templates[$key] : (string) \findService($key, true, '');
+		return ci('servicelocator')->findhbsTemplate($name);
 	}
 
 	/*
@@ -286,7 +287,7 @@ class Handlebars
 		if (!file_exists($cacheFile) || $this->forceCompile) {
 			$combined  = '<?php' . PHP_EOL . '/*' . PHP_EOL . 'DO NOT MODIFY THIS FILE' . PHP_EOL . 'Written: ' . date('Y-m-d H:i:s T') . PHP_EOL . '*/' . PHP_EOL . PHP_EOL;
 
-			$servicesConfig = \loadFileConfig('services');
+			$servicesConfig = ci('config')->item('services');
 
 			/* find all of the plugin "services" */
 			foreach ($servicesConfig['services'] as $service => $path) {
