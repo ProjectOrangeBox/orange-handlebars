@@ -2,6 +2,8 @@
 
 namespace Handlebars;
 
+use Exception;
+
 /**
  * Handlebars Parser
  *
@@ -33,35 +35,27 @@ namespace Handlebars;
  * 	['fn']($options['_this']) # if ??? - don't forget to send in the context
  * 	['inverse']($options['_this']) # else ???- don't forget to send in the context
  *
- * 	external functions used
- * 	path() - combined a config file key/value with some {magic} find and replace
- *  env()
- * 	atomic_file_put_contents() - atomic version of file_put_contents()
- *	ci('config')->item(...)
+ * external functions used
+ * path() - combined a config file key/value with some {magic} find and replace
+ * env()
+ * atomic_file_put_contents() - atomic version of file_put_contents()
+ * ci('config')->item(...)
+ * ci('servicelocator')->find(...)
  *
- **/
+ */
 
 use Handlebars\Add;
 use LightnCandy\LightnCandy;
 
 class Handlebars
 {
-	public $plugins = []; /* loaded helpers */
-	public $partials = []; /* embedded partials text */
-	public $templates = []; /* dynamically store local references (file path) */
+	protected $config = [];
 
-	protected $CIOUTPUT; /* instance of CodeIgniter */
-	protected $add = null;
+	protected $plugins = []; /* loaded helpers */
+	protected $partials = []; /* embedded partials text - used by add class */
+	protected $templates = []; /* dynamically added templates as paths - also used by the add class */
 
-	protected $defaultConfig = [];
-
-	public $forceCompile; /* always compile in developer mode */
-	public $templatePrefix; /* service locator prefix */
-	public $pluginPrefix; /* service locator prefix */
-	public $cachePrefix; /* prefix cached values with */
-	public $cacheFolder; /* where to store the compiled templates - a source code managed location is usually a good place */
-	public $delimiters; /* the handlebars delimiters */
-	public $flags; /* lightncandy handlebars compiler flags https://github.com/zordius/lightncandy#compile-options */
+	protected $add = null; /* place holder folder add sub class for chainability */
 
 	/**
 	 * Constructor - Sets Handlebars Preferences
@@ -72,28 +66,27 @@ class Handlebars
 	 */
 	public function __construct(array $config = [])
 	{
-		$this->CIOUTPUT = &get_instance()->output;
-
-		$this->add = new Add($this);
-
 		$requiredDefaults = [
-			'forceCompile' => (env('DEBUG') == 'development'), /* boolean */
-			'templatePrefix' => 'hbs-template-', /* string */
-			'pluginPrefix' => 'hbs-plugin-', /* string */
-			'cachePrefix' => 'hbs.', /* string */
-			'cacheFolder' =>'handlebars', /* string - folder inside cache folder if any */
+			'forceCompile' => (env('DEBUG') == 'development'), /* boolean - always compile in developer mode */
+			'templatePrefix' => 'hbs_templates', /* string - service locator type - must be lowercase */
+			'pluginPrefix' => 'hbs_plugin', /* string - service locator type - must be lowercase */
+			'cacheFolder' => path('{cache}').'handlebars', /* string - folder inside cache folder if any */
+			'HBCachePrefix' => 'hbs.', /* string - prefix all HBCache cached entries with */
 			'delimiters' => ['{{', '}}'], /* array */
+			/* lightncandy handlebars compiler flags https://github.com/zordius/lightncandy#compile-options */
 			'flags' => LightnCandy::FLAG_ERROR_EXCEPTION | LightnCandy::FLAG_HANDLEBARS | LightnCandy::FLAG_HANDLEBARSJS | LightnCandy::FLAG_BESTPERFORMANCE | LightnCandy::FLAG_RUNTIMEPARTIAL, /* integer */
 		];
 
 		$this->config = ci('config')->merged('handlebars',$requiredDefaults,$config);
 
-		$this->cacheFolder = $this->makeCacheFolder($this->cacheFolder);
+		require_once 'HBCache.php';
 
-		ci('servicelocator')->addServicePrefix('hbsPlugin',$this->config['pluginPrefix']);
-		ci('servicelocator')->addServicePrefix('hbsTemplate',$this->config['templatePrefix']);
+		\HBCache::setPrefix($this->config['HBCachePrefix']);
 
-		$this->loadHelpers();
+		/* allow handlebars->add->... chaining */
+		$this->add = new Add($this,$plugins,$partials,$templates);
+
+		$this->makeCacheFolder($this->config['cacheFolder']);
 	}
 
 	/* These are just like CodeIgniter regular parser */
@@ -140,7 +133,7 @@ class Handlebars
 	public function set_delimiters(/* string|array */$l = '{{', string $r = '}}'): Handlebars
 	{
 		/* set delimiters */
-		$this->delimiters = (is_array($l)) ? $l : [$l, $r];
+		$this->config['delimiters'] = (is_array($l)) ? $l : [$l, $r];
 
 		/* chain-able */
 		return $this;
@@ -165,7 +158,7 @@ class Handlebars
 
 		/* compile it into php magic! */
 		return LightnCandy::compile($templateSource, [
-			'flags' => $this->flags, /* load our "compiled" helpers */
+			'flags' => $this->config['flags'], /* load our "compiled" helpers */
 			'helpers' => $this->plugins, /* add this to the compiled file for reference */
 			'renderex' => '/* ' . $comment . ' compiled @ ' . date('Y-m-d h:i:s e') . ' */', /* added to compiled PHP */
 			'partialresolver' => function ($context, $name) { /* include / partial handler */
@@ -174,11 +167,11 @@ class Handlebars
 
 				try {
 					$template = $this->fileGetContents($this->findTemplate($name));
-				} catch (\Exception $e) { /* If the template isn't found it will use the default already set */ }
+				} catch (Exception $e) { /* If the template isn't found it will use the default already set */ }
 
 				return $template;
 			},
-			'delimiters' => $this->delimiters,
+			'delimiters' => $this->config['delimiters'],
 			/*
 			partial templates attached directly - these are a little to hard to use in cli compile all mode but,
 			since this library supports this feature I figured I should added it just to be complete
@@ -195,7 +188,10 @@ class Handlebars
 	*/
 	public function findTemplate(string $name): string
 	{
-		return ci('servicelocator')->findhbsTemplate($name);
+		$name = strtolower($name);
+
+		/* when we try to load a template which doesn't exist it wil throw an error */
+		return (isset($this->templates[$name])) ? $this->templates[$name] : ci('servicelocator')->find($this->config['templatePrefix'],$name);
 	}
 
 	/*
@@ -221,10 +217,10 @@ class Handlebars
 	public function hbsParse(string $template, bool $isFile): string
 	{
 		/* build the compiled file path */
-		$compiledFile = $this->cacheFolder . '/' . md5($template) . '.php';
+		$compiledFile = $this->config['cacheFolder'] . '/' . md5($template) . '.php';
 
 		/* always compile in development or not save or compile if doesn't exist */
-		if ($this->forceCompile || !file_exists($compiledFile)) {
+		if ($this->config['forceCompile'] || !file_exists($compiledFile)) {
 			/* compile the template as either file or string */
 			if ($isFile) {
 				$source = $this->fileGetContents($this->findTemplate($template));
@@ -253,7 +249,7 @@ class Handlebars
 		/* did we find this template? */
 		if (!file_exists($compiledFile)) {
 			/* nope! - fatal error! */
-			throw new \Exception('Could not locate compiled handlebars file ' . $compiledFile);
+			throw new Exception('Could not locate compiled handlebars file ' . $compiledFile);
 		}
 
 		/* yes include it */
@@ -261,7 +257,7 @@ class Handlebars
 
 		/* is what we loaded even executable? */
 		if (!is_callable($templatePHP)) {
-			throw new \Exception('Could not execute template');
+			throw new Exception('Could not execute template');
 		}
 
 		/* send data into the magic void... */
@@ -269,7 +265,7 @@ class Handlebars
 
 		/* Should we append to output? */
 		if ($appendOutput) {
-			$this->CIOUTPUT->append_output($output);
+			ci('output')->append_output($output);
 		}
 
 		return $output;
@@ -282,17 +278,16 @@ class Handlebars
 	 */
 	protected function loadHelpers(): void
 	{
-		$cacheFile = $this->cacheFolder . '/handlebar.helpers.php';
+		$cacheFile = $this->config['cacheFolder'] . '/handlebar.helpers.php';
 
-		if (!file_exists($cacheFile) || $this->forceCompile) {
+		if ($this->config['forceCompile'] || !file_exists($cacheFile)) {
 			$combined  = '<?php' . PHP_EOL . '/*' . PHP_EOL . 'DO NOT MODIFY THIS FILE' . PHP_EOL . 'Written: ' . date('Y-m-d H:i:s T') . PHP_EOL . '*/' . PHP_EOL . PHP_EOL;
 
-			$servicesConfig = ci('config')->item('services');
+			$plugins = ci('config')->item('services.'.$this->config['pluginPrefix']);
 
 			/* find all of the plugin "services" */
-			foreach ($servicesConfig['services'] as $service => $path) {
-				/* is this a handlebars plugin? */
-				if (substr($service, 0, strlen($this->pluginPrefix)) == $this->pluginPrefix) {
+			if (\is_array($plugins)) {
+				foreach ($plugins as $service => $path) {
 					$pluginSource  = php_strip_whitespace(__ROOT__.$path);
 					$pluginSource  = trim(str_replace(['<?php', '<?','?>'],'',$pluginSource));
 					$pluginSource  = trim('/* ' . $path . ' */'.PHP_EOL.$pluginSource).PHP_EOL.PHP_EOL;
@@ -326,67 +321,23 @@ class Handlebars
 		$absolutePath = __ROOT__ . $file;
 
 		if (!\file_exists($absolutePath)) {
-			throw new \Exception('Can not location the file "' . $absolutePath . '".');
+			throw new Exception('Can not location the file "' . $absolutePath . '".');
 		}
 
-		return file_get_contents($absolutePath);
+		return \file_get_contents($absolutePath);
 	}
 
-	public function makeCacheFolder(string $folder): string
+	public function makeCacheFolder(string $folder): void
 	{
-		$folder = path('{cache}').trim($folder,'/');
-
 		/* let's make sure the compile folder is there before we try to save the compiled file! */
 		if (!\file_exists($folder)) {
 			mkdir($folder, 0755, true);
 		}
 
 		/* is the folder writable by us? */
-		if (!is_writable($folder)) {
-			throw new \Exception('Cannot write to folder ' . $folder);
+		if (!\is_writable($folder)) {
+			throw new Exception('Cannot write to folder ' . $folder);
 		}
-
-		return $folder;
 	}
 
-	/* caching used by plugins */
-
-	/*
-	* used by handlebar helpers setter & getter
-	*
-	* @param array
-	* @param string
-	* @return boolean/string
-
-	if (!$output = ci()->handlebars->cache($options)) {
-		$output = strtolower($options['fn']($options['_this']));
-
-		ci()->handlebars->cache($options,$output);
-	}
-
-	*/
-	static public function cache(array $options, $output = null) /* mixed */
-	{
-		/* if output is not NULL then "set" a value if not then "get" a value */
-		return ($output) ? self::cacheSet($options, $output) : self::cacheGet($options);
-	}
-
-	/*
-	This is used by the plugs to cache content
-
-	cache="60"
-
-	{{q:cache_demo cache="5"}}
-
-	time is in minutes
-	*/
-	static protected function cacheSet(array $options, $output)
-	{
-		return ((int) $options['hash']['cache'] > 0 && (env('DEBUG') != 'development')) ? ci('cache')->save(ci('handlebars')->cachePrefix . md5(json_encode($options)), $output) : false;
-	}
-
-	static protected function cacheGet(array $options)
-	{
-		return ((int) $options['hash']['cache'] > 0 && (env('DEBUG') != 'development')) ? ci('cache')->get(ci('handlebars')->cachePrefix . md5(json_encode($options))) : false;
-	}
 } /* end class */

@@ -1,8 +1,10 @@
 {{> demo/header}}
 
-<h4>page_title = {{page_title}}</h4>
+<p>page_title = {{page_title}}</p>
+<p>Clock: [{{now}}]</p>
+<p>{{#q:cache_demo cache="5"}}This will be cached for 5 minutes [{{now}}] {{/q:cache_demo}}</p>
 
-{{q:cache_demo cache="5"}}
+<p>{{#exp:block}}This is the blocker content{{/exp:block}}</p>
 
 {{set name="age" value=page_title}}
 {{set name="foo" value="bar"}}
