@@ -44,6 +44,7 @@ use Exception;
  *
  */
 
+use HBCache;
 use Handlebars\Add;
 use LightnCandy\LightnCandy;
 
@@ -51,11 +52,10 @@ class Handlebars
 {
 	protected $config = [];
 
-	protected $plugins = []; /* loaded helpers */
-	protected $partials = []; /* embedded partials text - used by add class */
-	protected $templates = []; /* dynamically added templates as paths - also used by the add class */
+	protected $partials = []; /* dynamically add partials as STRING - used by add sub class */
+	protected $plugins = []; /* array of loaded plugins */
 
-	protected $add = null; /* place holder folder add sub class for chainability */
+	public $add = null; /* place holder folder add sub class for chainability */
 
 	/**
 	 * Constructor - Sets Handlebars Preferences
@@ -64,12 +64,12 @@ class Handlebars
 	 *
 	 * @param	array	$userConfig = array()
 	 */
-	public function __construct(array $config = [])
+	public function __construct(array &$config = [])
 	{
 		$requiredDefaults = [
-			'forceCompile' => (env('DEBUG') == 'development'), /* boolean - always compile in developer mode */
-			'templatePrefix' => 'hbs_templates', /* string - service locator type - must be lowercase */
-			'pluginPrefix' => 'hbs_plugin', /* string - service locator type - must be lowercase */
+			'forceCompile' => (DEBUG == 'development'), /* boolean - always compile in developer mode */
+			'templateServiceType' => 'hbs_templates', /* string - service locator type - must be lowercase */
+			'pluginServiceType' => 'hbs_plugin', /* string - service locator type - must be lowercase */
 			'cacheFolder' => path('{cache}').'handlebars', /* string - folder inside cache folder if any */
 			'HBCachePrefix' => 'hbs.', /* string - prefix all HBCache cached entries with */
 			'delimiters' => ['{{', '}}'], /* array */
@@ -79,13 +79,16 @@ class Handlebars
 
 		$this->config = ci('config')->merged('handlebars',$requiredDefaults,$config);
 
+		/* bring in the wrapper */
 		require_once 'HBCache.php';
 
-		\HBCache::setPrefix($this->config['HBCachePrefix']);
+		/* setup the wrapper */
+		HBCache::setPrefix($this->config['HBCachePrefix']);
 
 		/* allow handlebars->add->... chaining */
-		$this->add = new Add($this,$plugins,$partials,$templates);
+		$this->add = new Add($this,$this->config,$this->partials,$this->plugins);
 
+		/* lets make sure the template path is there */
 		$this->makeCacheFolder($this->config['cacheFolder']);
 	}
 
@@ -153,30 +156,29 @@ class Handlebars
 	 */
 	public function compile(string $templateSource, string $comment = ''): string
 	{
-		/* get our helpers if there aren't already loaded */
+		/* Get our helpers if they aren't already loaded */
 		$this->loadHelpers();
 
-		/* compile it into php magic! */
+		/* Compile it into php magic! Thank you zordius https://github.com/zordius/lightncandy */
 		return LightnCandy::compile($templateSource, [
-			'flags' => $this->config['flags'], /* load our "compiled" helpers */
-			'helpers' => $this->plugins, /* add this to the compiled file for reference */
-			'renderex' => '/* ' . $comment . ' compiled @ ' . date('Y-m-d h:i:s e') . ' */', /* added to compiled PHP */
-			'partialresolver' => function ($context, $name) { /* include / partial handler */
-				/* default */
-				$template = '<!-- template "' . $name . '" not found !>';
-
+			'flags' => $this->config['flags'], /* compiler flags */
+			'helpers' => $this->plugins, /* Add the plugins (handlebars.js calls helpers) */
+			'renderex' => '/* ' . $comment . ' compiled @ ' . date('Y-m-d h:i:s e') . ' */', /* Added to compiled PHP */
+			'delimiters' => $this->config['delimiters'],
+			'partialresolver' => function ($context, $name) { /* partial & template handling */
+				/* Try if it's a partial, template or insert as html comment */
 				try {
-					$template = $this->fileGetContents($this->findTemplate($name));
-				} catch (Exception $e) { /* If the template isn't found it will use the default already set */ }
+					$template = $this->findPartial($name);
+				} catch(Exception $e) {
+					try {
+						$template = $this->fileGetContents($this->findTemplate($name));
+					} catch (Exception $e) {
+						$template = '<!-- partial named "' . $name . '" could not found --!>';
+					}
+				}
 
 				return $template;
 			},
-			'delimiters' => $this->config['delimiters'],
-			/*
-			partial templates attached directly - these are a little to hard to use in cli compile all mode but,
-			since this library supports this feature I figured I should added it just to be complete
-			*/
-			'partials' => $this->partials,
 		]);
 	}
 
@@ -188,10 +190,19 @@ class Handlebars
 	*/
 	public function findTemplate(string $name): string
 	{
+		/* ci('servicelocator')->find(...) will throw an error if it's not found */
+		return ci('servicelocator')->find($this->config['templateServiceType'],$name);
+	}
+
+	public function findPartial(string $name): string
+	{
 		$name = strtolower($name);
 
-		/* when we try to load a template which doesn't exist it wil throw an error */
-		return (isset($this->templates[$name])) ? $this->templates[$name] : ci('servicelocator')->find($this->config['templatePrefix'],$name);
+		if (!isset($this->partials[$name])) {
+			throw new Exception('Could not locate partial named '.$name.'.');
+		}
+
+		return $this->partials[$name];
 	}
 
 	/*
@@ -283,7 +294,7 @@ class Handlebars
 		if ($this->config['forceCompile'] || !file_exists($cacheFile)) {
 			$combined  = '<?php' . PHP_EOL . '/*' . PHP_EOL . 'DO NOT MODIFY THIS FILE' . PHP_EOL . 'Written: ' . date('Y-m-d H:i:s T') . PHP_EOL . '*/' . PHP_EOL . PHP_EOL;
 
-			$plugins = ci('config')->item('services.'.$this->config['pluginPrefix']);
+			$plugins = ci('config')->item('services.'.$this->config['pluginServiceType']);
 
 			/* find all of the plugin "services" */
 			if (\is_array($plugins)) {
@@ -303,11 +314,11 @@ class Handlebars
 		/* start with empty array */
 		$helpers = [];
 
-		/* include the combined file */
+		/* include the combined "cache" file */
 		include $cacheFile;
 
 		/* assign it to the class property directly attached over loaded */
-		$this->plugins = array_merge($helpers, $this->plugins);
+		$this->plugins = array_replace($helpers,$this->plugins);
 	}
 
 	/**

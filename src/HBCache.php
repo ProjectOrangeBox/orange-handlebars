@@ -34,7 +34,9 @@ class HBCache {
 	{
 		self::setup();
 
-		ci('cache')->{self::$adapter}->save(self::makeKey($options), $data, (int)$options['hash']['cache']);
+		$ttl = (int)($options['hash']['cache'] * 60);
+
+		ci('cache')->{self::$adapter}->save(self::makeKey($options), $data, $ttl);
 	}
 
 	static public function get(array $options) /* mixed */

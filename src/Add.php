@@ -6,15 +6,24 @@ use Closure;
 
 class Add {
 	protected $parent;
+	protected $config;
 	protected $partials;
-	protected $templates;
 	protected $plugins;
 
-	public function __construct($parent,&$partials,&$templates,&$plugins)
+	/**
+	 * __construct
+	 *
+	 * @param mixed &$parent
+	 * @param mixed &$partials
+	 * @param mixed &$templates
+	 * @param mixed &$plugins
+	 * @return void
+	 */
+	public function __construct(handlebars &$parent,array &$config,array &$partials,array &$plugins)
 	{
-		$this->parent = $parent;
+		$this->parent = &$parent;
+		$this->config = &$config;
 		$this->partials = &$partials;
-		$this->templates = &$templates;
 		$this->plugins = &$plugins;
 	}
 
@@ -43,13 +52,19 @@ class Add {
 	 */
 	public function partial(string $name,string $template) : handlebars
 	{
-		$this->partials[$name] = $template;
+		$this->partials[strtolower($name)] = $template;
 
 		/* chain-able */
 		return $this->parent;
 	}
 
-public function templates(array $templates) : handlebars
+	/**
+	 * templates
+	 *
+	 * @param array $templates
+	 * @return void
+	 */
+	public function templates(array $templates) : handlebars
 	{
 		foreach ($templates as $name=>$path) {
 			$this->template($name,$path);
@@ -67,12 +82,12 @@ public function templates(array $templates) : handlebars
 	 */
 	public function template(string $name,string $path) : handlebars
 	{
-		$this->templates[$name] = $path;
+		ci('servicelocator')->add($this->config['templateServiceType'],$name,$path);
+
 
 		/* chain-able */
 		return $this->parent;
 	}
-
 
 	/*
 	* add handlebar helpers as single string or array
