@@ -1,10 +1,26 @@
 {{> demo/header}}
 
+{{hbp:deferred key="userinfo"}}
+
 <p>page_title = {{page_title}}</p>
 <p>Clock: [{{now}}]</p>
 <p>{{#q:cache_demo cache="5"}}This will be cached for 5 minutes [{{now}}] {{/q:cache_demo}}</p>
 
 <p>{{#exp:block}}This is the blocker content{{/exp:block}}</p>
+
+{{#hbp:deferred}}
+<div><strong>
+{{#each projects}}
+	<h3>{{name}}</h3>
+	<h4>Deferred Assignees</h4>
+	<ul>
+	{{#each assignees}}
+		<li>{{name}} - {{age}}</li>
+	{{/each}}
+	</ul>
+{{/each}}
+</strong></div>
+{{/hbp:deferred}}
 
 {{set name="age" value=page_title}}
 {{set name="foo" value="bar"}}
@@ -14,10 +30,14 @@
 	<h4>Assignees</h4>
 	<ul>
 	{{#each assignees}}
-		<li>{{name}} {{age}}</li>
+		<li>{{name}} - {{age}}</li>
 	{{/each}}
 	</ul>
 {{/each}}
+
+{{#hbp:deferred}}
+<div><strong>This will also be deferred {{deferred_data}}</strong></div>
+{{/hbp:deferred}}
 
 {{#iif page_title "=" "Current Projects"}}
 	True Do This
@@ -32,6 +52,10 @@
 	else 1 equals 1
 {{/iif}}
 </p>
+
+{{#hbp:deferred}}
+<div><strong>finally this will be deferred {{deferred_data}}</strong></div>
+{{/hbp:deferred}}
 
 <p>
 {{#iif 1 "=" 2}}
@@ -78,6 +102,5 @@
 <p>{{#exp:uppercase}}{{page_title}}{{/exp:uppercase}}</p>
 
 {{> cats }}
-
 
 {{> demo/footer }}
