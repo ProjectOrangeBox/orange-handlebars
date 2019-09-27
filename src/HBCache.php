@@ -4,10 +4,21 @@
 
 class HBCache {
 	static $prefix = 'hbs.';
+	static $adapter = 'dummy';
+	static $setup = false;
 
 	static public function setPrefix(string $prefix): void
 	{
 		self::$prefix = $prefix;
+	}
+
+	static public function setCacheType(string $adapter): void
+	{
+		if (!ci('cache')->is_supported($adapter)) {
+			throw new Exception(sprintf('%s is a unsupported Cache Driver.',$adapter));
+		}
+
+		self::$adapter = $adapter;
 	}
 
 	/*
@@ -19,19 +30,27 @@ class HBCache {
 
 	time is in minutes
 	*/
-	static public function set(array $options, $data)
+	static public function set(array $options, $data): void
 	{
-		return (self::test($options)) ? ci('cache')->save(self::makeKey($options), $data) : false;
+		self::setup();
+
+		ci('cache')->{self::$adapter}->save(self::makeKey($options), $data, (int)$options['hash']['cache']);
 	}
 
-	static public function get(array $options)
+	static public function get(array $options) /* mixed */
 	{
-		return (self::test($options)) ? ci('cache')->get(self::makeKey($options)) : false;
+		self::setup();
+
+		return ci('cache')->{self::$adapter}->get(self::makeKey($options));
 	}
 
-	static protected function test(array $options): bool
+	static protected function setup()
 	{
-		return ((int) $options['hash']['cache'] > 0 && (env('DEBUG') != 'development'));
+		if (!self::$setup) {
+			self::$adapter = ci('cache')->defaultAdapter();
+
+			self::$setup = true;
+		}
 	}
 
 	static protected function makeKey(array $options): string
