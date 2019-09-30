@@ -1,6 +1,6 @@
 {{> demo/header}}
 
-{{hbp:deferred key="userinfo"}}
+{{hbp:deferred id="userinfo"}}
 
 <p>page_title = {{page_title}}</p>
 <p>Clock: [{{now}}]</p>
@@ -8,19 +8,7 @@
 
 <p>{{#exp:block}}This is the blocker content{{/exp:block}}</p>
 
-{{#hbp:deferred}}
-<div><strong>
-{{#each projects}}
-	<h3>{{name}}</h3>
-	<h4>Deferred Assignees</h4>
-	<ul>
-	{{#each assignees}}
-		<li>{{name}} - {{age}}</li>
-	{{/each}}
-	</ul>
-{{/each}}
-</strong></div>
-{{/hbp:deferred}}
+{{hbp:deferred id="injecttable"}}
 
 {{set name="age" value=page_title}}
 {{set name="foo" value="bar"}}
@@ -34,10 +22,6 @@
 	{{/each}}
 	</ul>
 {{/each}}
-
-{{#hbp:deferred}}
-<div><strong>This will also be deferred {{deferred_data}}</strong></div>
-{{/hbp:deferred}}
 
 {{#iif page_title "=" "Current Projects"}}
 	True Do This
@@ -53,10 +37,6 @@
 {{/iif}}
 </p>
 
-{{#hbp:deferred}}
-<div><strong>finally this will be deferred {{deferred_data}}</strong></div>
-{{/hbp:deferred}}
-
 <p>
 {{#iif 1 "=" 2}}
 	1 equals 1
@@ -64,6 +44,13 @@
 	else 1 equals 1
 {{/iif}}
 </p>
+
+<strong>
+{{hbp:deferred id="hello_what"}}
+</strong>
+
+
+<p>Deferred Image Load: {{hbp:deferred id="someimage"}}</p>
 
 <p>
 {{#iif 1 "=" 1}}
