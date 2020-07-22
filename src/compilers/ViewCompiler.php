@@ -5,6 +5,9 @@ namespace Handlebars\compilers;
 use FS;
 use Exception;
 use LightnCandy\LightnCandy;
+use Handlebars\compilers\exception\CannotExecuteView;
+use Handlebars\compilers\exception\CannotWrite;
+use Handlebars\compilers\exception\ViewFileNotFound;
 
 class ViewCompiler
 {
@@ -46,7 +49,7 @@ class ViewCompiler
 
 		/* is what we loaded even executable? */
 		if (!is_callable($templatePHP)) {
-			throw new Exception('Could not execute template');
+			throw new CannotExecuteView($compiledFile);
 		}
 
 		return $templatePHP;
@@ -109,14 +112,14 @@ class ViewCompiler
 
 		/* is the folder writable by us? */
 		if (!FS::is_writable($folder)) {
-			throw new Exception('Cannot write to folder ' . $folder);
+			throw new CannotWrite($folder);
 		}
 	}
 
 	protected function fileGetContents(string $file): string
 	{
 		if (!FS::file_exists($file)) {
-			throw new Exception('Can not location the file "' . $file . '".');
+			throw new ViewFileNotFound($file);
 		}
 
 		return FS::file_get_contents($file);

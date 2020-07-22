@@ -3,10 +3,11 @@
 namespace Handlebars;
 
 use Closure;
-use Exception;
 use Handlebars\compilers\ViewCompiler;
 use Handlebars\compilers\PluginCompiler;
 use projectorangebox\views\ViewsInterface;
+use Handlebars\compilers\exception\ViewNotFound;
+use Handlebars\compilers\exception\ViewFileNotFound;
 
 /**
  * Handlebars Parser
@@ -181,18 +182,19 @@ class Handlebars implements ViewsInterface
 		$name = strtolower($name);
 
 		if (!isset($this->views[$name])) {
-			throw new Exception('View Not Found ' . $name);
+			throw new ViewNotFound($name);
 		}
 
 		$file = $this->views[$name];
 
 		if (!\FS::file_exists($file)) {
-			throw new Exception('View File Not Found ' . $this->views[$file]);
+			throw new ViewFileNotFound($this->views[$file]);
 		}
 
 		return $file;
 	}
 
+	/* pass thru */
 	public function addPlugin(string $name, Closure $closure): ViewsInterface
 	{
 		$this->pluginCompiler->addPlugin($name, $closure);

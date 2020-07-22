@@ -4,7 +4,7 @@ namespace Handlebars\compilers;
 
 use FS;
 use Closure;
-use Exception;
+use Handlebars\compilers\exception\CannotWrite;
 
 class PluginCompiler
 {
@@ -101,7 +101,7 @@ class PluginCompiler
 
 		/* is the folder writable by us? */
 		if (!FS::is_writable($folder)) {
-			throw new Exception('Cannot write to folder ' . $folder);
+			throw new CannotWrite($folder);
 		}
 	}
 
