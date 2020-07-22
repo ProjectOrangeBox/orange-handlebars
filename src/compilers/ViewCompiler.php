@@ -1,55 +1,51 @@
 <?php
 
-namespace Handlebars\compilers;
+namespace projectorangebox\handlebars\compilers;
 
 use FS;
 use Exception;
 use LightnCandy\LightnCandy;
-use Handlebars\compilers\exception\CannotExecuteView;
-use Handlebars\compilers\exception\CannotWrite;
-use Handlebars\compilers\exception\ViewFileNotFound;
+use projectorangebox\handlebars\compilers\Cache;
+use projectorangebox\handlebars\exceptions\CannotExecuteView;
 
 class ViewCompiler
 {
 	protected $config = [];
 	protected $handlebars = null;
 	protected $plugins = null;
+	protected $cache = null;
+	protected $flags = 0;
+	protected $delimiters = ['{{', '}}'];
 
-	public function __construct(array $config = [], $plugins, $handlebars)
+	public function __construct(array $config)
 	{
-		$defaultConfig = [
-			'force compile' => true, /* boolean - always compile in developer mode */
-			'cache folder' => '/var/views', /* string - folder inside cache folder if any */
-			'cache prefix' => 'hbs.', /* string - prefix all HBCache cached entries with */
-			'delimiters' => ['{{', '}}'], /* array */
-			/* lightncandy handlebars compiler flags https://github.com/zordius/lightncandy#compile-options */
-			'flags' => LightnCandy::FLAG_ERROR_EXCEPTION | LightnCandy::FLAG_HANDLEBARS | LightnCandy::FLAG_HANDLEBARSJS | LightnCandy::FLAG_BESTPERFORMANCE | LightnCandy::FLAG_RUNTIMEPARTIAL, /* integer */
-			'plugins' => [], /* must come in ['name'=>'path'] */
-		];
+		$this->config = $config;
 
-		$this->config = \array_replace($defaultConfig, $config);
+		/* lightncandy handlebars compiler flags https://github.com/zordius/lightncandy#compile-options */
+		$this->flags = $config['flags'] ?? LightnCandy::FLAG_ERROR_EXCEPTION | LightnCandy::FLAG_HANDLEBARS | LightnCandy::FLAG_HANDLEBARSJS | LightnCandy::FLAG_BESTPERFORMANCE | LightnCandy::FLAG_RUNTIMEPARTIAL;
 
-		$this->plugins = $plugins;
-		$this->handlebars = $handlebars;
+		$this->delimiters = $config['delimiters'] ?? $this->delimiters;
 
-		/* we must have a working directory which is read and write */
-		$this->makeCacheFolder($this->config['cache folder']);
+		$this->handlebars = $config['parent'];
+		$this->plugins = $config['pluginsClass'];
+
+		$this->cache = new Cache($this->config);
 	}
 
 	public function getView(string $viewPath)
 	{
-		/* build the compiled file path */
-		$compiledFile = $this->config['cache folder'] . '/' . $this->config['cache prefix'] . md5($viewPath) . '.php';
+		$key = md5($viewPath);
 
-		if (!$this->fileExists($compiledFile)) {
-			FS::file_put_contents($compiledFile, $this->compile($this->fileGetContents($viewPath), '/* ' . $viewPath . ' compiled @ ' . date('Y-m-d h:i:s e') . ' */'));
+		if (!$this->cache->get($key)) {
+			/* file location validated in the parent class handlebars */
+			$this->cache->save($key, $this->compile(FS::file_get_contents($viewPath), '/* ' . $viewPath . ' compiled @ ' . date('Y-m-d h:i:s e') . ' */'));
 		}
 
-		$templatePHP = FS::require($compiledFile);
+		$templatePHP = $this->cache->include($key);
 
-		/* is what we loaded even executable? */
+		/* is what we got back even executable? */
 		if (!is_callable($templatePHP)) {
-			throw new CannotExecuteView($compiledFile);
+			throw new CannotExecuteView($key);
 		}
 
 		return $templatePHP;
@@ -65,7 +61,7 @@ class ViewCompiler
 	public function setDelimiters(/* string|array */$l = '{{', string $r = '}}'): void
 	{
 		/* set delimiters */
-		$this->config['delimiters'] = (is_array($l)) ? $l : [$l, $r];
+		$this->delimiters = (is_array($l)) ? $l : [$l, $r];
 	}
 
 	/**
@@ -78,10 +74,10 @@ class ViewCompiler
 	{
 		/* Compile it into php magic! Thank you zordius https://github.com/zordius/lightncandy */
 		$source = LightnCandy::compile($templateSource, [
-			'flags' => $this->config['flags'], /* compiler flags */
+			'flags' => $this->flags, /* compiler flags */
 			'helpers' => $this->plugins->getPlugins(),
 			'renderex' => $comment,
-			'delimiters' => $this->config['delimiters'],
+			'delimiters' => $this->delimiters,
 			'partialresolver' => function ($context, $name) { /* partial & template handling */
 				try {
 					/* raw template source not compiled */
@@ -95,33 +91,5 @@ class ViewCompiler
 		]);
 
 		return '<?php' . PHP_EOL . $source . PHP_EOL . '?>';
-	}
-
-	protected function fileExists(string $filePath): bool
-	{
-		/* always compile in development or not save or compile if doesn't exist */
-		return !($this->config['force compile'] || !FS::file_exists($filePath));
-	}
-
-	protected function makeCacheFolder(string $folder): void
-	{
-		/* let's make sure the compile folder is there before we try to save the compiled file! */
-		if (!FS::file_exists($folder)) {
-			FS::mkdir($folder, 0755, true);
-		}
-
-		/* is the folder writable by us? */
-		if (!FS::is_writable($folder)) {
-			throw new CannotWrite($folder);
-		}
-	}
-
-	protected function fileGetContents(string $file): string
-	{
-		if (!FS::file_exists($file)) {
-			throw new ViewFileNotFound($file);
-		}
-
-		return FS::file_get_contents($file);
 	}
 } /* end class */

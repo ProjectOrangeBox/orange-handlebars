@@ -1,12 +1,14 @@
 {
-	"name": "packages/handlebars",
+	"name": "projectorangebox/handlebars",
 	"description": "Handlebars Wrapper",
 	"require": {
+		"projectorangebox/views": "dev-master",
+		"projectorangebox/cache": "dev-master",
 		"zordius/lightncandy": "dev-master"
 	},
 	"autoload": {
 		"psr-4": {
-			"Handlebars\\": "src"
+			"projectorangebox\\handlebars\\": "src"
 		}
 	}
 }

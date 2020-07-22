@@ -1,30 +1,29 @@
 <?php
 
-namespace Handlebars\compilers;
+namespace projectorangebox\handlebars\compilers;
 
 use FS;
 use projectorangebox\cache\CacheInterface;
-use Handlebars\compilers\exception\CannotWrite;
+use projectorangebox\handlebars\exceptions\CannotWrite;
 
 class Cache implements CacheInterface
 {
 	protected $config = [];
 
 	protected $cachePath = '';
+	protected $cachePrefix = '';
+	protected $forceCompile = true;
 
 	public function __construct(array $config)
 	{
-		$defaultConfig = [
-			'force compile' => true, /* boolean - always compile in developer mode */
-			'cache folder' => '/var/views', /* string - folder inside cache folder if any */
-			'cache prefix' => 'hbs.', /* string - prefix all HBCache cached entries with */
-			'plugins' => [], /* must come in ['name'=>'path'] */
-		];
+		$this->config = $config;
 
-		$this->config = \array_replace($defaultConfig, $config);
+		$this->forceCompile = $config['force compile'] ?? $this->forceCompile;
+
+		$this->cachePrefix = $config['cache prefix'] ?? $this->cachePrefix;
 
 		/* we must have a working directory which is read and write */
-		$this->makeCacheFolder($this->config['cache folder']);
+		$this->cachePath = $this->makeCacheFolder($this->config['cache folder']);
 	}
 
 	public function get(string $key)
@@ -33,13 +32,23 @@ class Cache implements CacheInterface
 
 		$cacheFile = $this->getCachePath($key);
 
-		$value = null;
+		$value = false;
 
 		if ($this->fileExists($cacheFile)) {
-			$value = include(FS::resolve($cacheFile));
+			$cacheFileAbs = FS::resolve($cacheFile);
+
+			$value = include $cacheFileAbs;
 		}
 
 		return $value;
+	}
+
+	/* use only if you know it's there and want to ignore force compile setting */
+	public function include(string $key)
+	{
+		\log_message('info', 'Handlebars Cache Include ' . $key);
+
+		return include FS::resolve($this->getCachePath($key));
 	}
 
 	public function save(string $key, $value, int $ttl = null, bool $raw = false): bool
@@ -106,10 +115,10 @@ class Cache implements CacheInterface
 
 	protected function getCachePath(string $key): string
 	{
-		return $this->cachePath . $key . '.php';
+		return $this->cachePath . $this->cachePrefix . $key . '.php';
 	}
 
-	protected function makeCacheFolder(string $folder): void
+	protected function makeCacheFolder(string $folder): string
 	{
 		$folder = trim($folder, '/');
 
@@ -123,11 +132,11 @@ class Cache implements CacheInterface
 			throw new CannotWrite($folder);
 		}
 
-		$this->cachePath = $folder . '/';
+		return $folder . '/';
 	}
 
 	protected function fileExists(string $filePath): bool
 	{
-		return !($this->config['force compile'] || !FS::file_exists($filePath));
+		return !($this->forceCompile || !FS::file_exists($filePath));
 	}
 } /* end class */

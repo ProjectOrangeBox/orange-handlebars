@@ -1,6 +1,6 @@
 <?php
 
-namespace Handlebars;
+namespace projectorangebox\handlebars;
 
 use projectorangebox\views\ViewsException;
 

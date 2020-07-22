@@ -1,8 +1,8 @@
 <?php
 
-namespace Handlebars\compilers\exception;
+namespace projectorangebox\handlebars\exceptions;
 
-use Handlebars\HandlebarsException;
+use projectorangebox\handlebars\HandlebarsException;
 
 final class CannotExecuteView extends HandlebarsException
 {

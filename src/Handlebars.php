@@ -1,13 +1,13 @@
 <?php
 
-namespace Handlebars;
+namespace projectorangebox\handlebars;
 
 use Closure;
-use Handlebars\compilers\ViewCompiler;
-use Handlebars\compilers\PluginCompiler;
 use projectorangebox\views\ViewsInterface;
-use Handlebars\compilers\exception\ViewNotFound;
-use Handlebars\compilers\exception\ViewFileNotFound;
+use projectorangebox\handlebars\compilers\ViewCompiler;
+use projectorangebox\handlebars\exceptions\ViewNotFound;
+use projectorangebox\handlebars\compilers\PluginCompiler;
+use projectorangebox\handlebars\exceptions\ViewFileNotFound;
 
 /**
  * Handlebars Parser
@@ -75,7 +75,7 @@ class Handlebars implements ViewsInterface
 		/* my classes */
 		$this->pluginCompiler = new PluginCompiler($config);
 
-		$this->viewCompiler = new ViewCompiler($config, $this->pluginCompiler, $this);
+		$this->viewCompiler = new ViewCompiler($config + ['pluginsClass' => $this->pluginCompiler, 'parent' => $this]);
 	}
 
 	public function render(string $key, array $data = null): string
