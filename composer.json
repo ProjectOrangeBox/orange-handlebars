@@ -1,12 +1,12 @@
 {
 	"name": "packages/handlebars",
-	"description": "CodeIgniter Handlebars Wrapper",
+	"description": "Handlebars Wrapper",
 	"require": {
 		"zordius/lightncandy": "dev-master"
 	},
 	"autoload": {
 		"psr-4": {
 			"Handlebars\\": "src"
-    }
+		}
 	}
 }

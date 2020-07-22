@@ -2,7 +2,11 @@
 
 namespace Handlebars;
 
+use Closure;
 use Exception;
+use Handlebars\compilers\ViewCompiler;
+use Handlebars\compilers\PluginCompiler;
+use projectorangebox\views\ViewsInterface;
 
 /**
  * Handlebars Parser
@@ -44,18 +48,15 @@ use Exception;
  *
  */
 
-use HBCache;
-use Handlebars\Add;
-use LightnCandy\LightnCandy;
-
-class Handlebars
+class Handlebars implements ViewsInterface
 {
 	protected $config = [];
 
-	protected $partials = []; /* dynamically add partials as STRING - used by add sub class */
-	protected $plugins = []; /* array of loaded plugins */
+	protected $views = [];
+	protected $data = [];
 
-	public $add = null; /* place holder folder add sub class for chainability */
+	protected $viewCompiler = null;
+	protected $pluginCompiler = null;
 
 	/**
 	 * Constructor - Sets Handlebars Preferences
@@ -64,66 +65,107 @@ class Handlebars
 	 *
 	 * @param	array	$userConfig = array()
 	 */
-	public function __construct(array &$config = [])
+	public function __construct(array $config = [])
 	{
-		$requiredDefaults = [
-			'forceCompile' => (DEBUG == 'development'), /* boolean - always compile in developer mode */
-			'templateServiceType' => 'hbs_templates', /* string - service locator type - must be lowercase */
-			'pluginServiceType' => 'hbs_plugin', /* string - service locator type - must be lowercase */
-			'cacheFolder' => path('{cache}').'handlebars', /* string - folder inside cache folder if any */
-			'HBCachePrefix' => 'hbs.', /* string - prefix all HBCache cached entries with */
-			'delimiters' => ['{{', '}}'], /* array */
-			/* lightncandy handlebars compiler flags https://github.com/zordius/lightncandy#compile-options */
-			'flags' => LightnCandy::FLAG_ERROR_EXCEPTION | LightnCandy::FLAG_HANDLEBARS | LightnCandy::FLAG_HANDLEBARSJS | LightnCandy::FLAG_BESTPERFORMANCE | LightnCandy::FLAG_RUNTIMEPARTIAL, /* integer */
+		$defaultConfig = [
+			'views' => [], /* must come in ['name'=>'path'] */
+			'data' => [],
 		];
 
-		$this->config = ci('config')->merged('handlebars',$requiredDefaults,$config);
+		$this->config = \array_replace($defaultConfig, $config);
 
-		/* bring in the wrapper */
-		require_once 'HBCache.php';
+		$this->views = $this->config['views'];
 
-		/* setup the wrapper */
-		HBCache::setPrefix($this->config['HBCachePrefix']);
+		$this->data = $this->config['data'];
 
-		/* allow handlebars->add->... chaining */
-		$this->add = new Add($this,$this->config,$this->partials,$this->plugins);
+		/* my classes */
+		$this->pluginCompiler = new PluginCompiler($this->config);
 
-		/* lets make sure the template path is there */
-		$this->makeCacheFolder($this->config['cacheFolder']);
+		$this->viewCompiler = new ViewCompiler($this->config, $this->pluginCompiler, $this);
 	}
 
-	/* These are just like CodeIgniter regular parser */
-
-	/**
-	 * Parse a template
-	 *
-	 * Parses pseudo-variables contained in the specified template view,
-	 * replacing them with the data in the second param
-	 *
-	 * @param	string
-	 * @param	array
-	 * @param	bool
-	 * @return	string
-	 */
-	public function parse(string $templateFile, array $data = [], bool $return = false): string
+	public function render(string $key, array $data = null): string
 	{
-		return $this->hbsRun($this->hbsParse($templateFile, true), $data, !$return);
+		if (is_array($data)) {
+			$this->data = array_replace($this->data, $data);
+		}
+
+		$phpFunction = $this->viewCompiler->getView($this->getView($key));
+
+		return $phpFunction($this->data);
 	}
 
 	/**
-	 * Parse a String
+	 * addView
 	 *
-	 * Parses pseudo-variables contained in the specified string,
-	 * replacing them with the data in the second param
-	 *
-	 * @param	string
-	 * @param	array
-	 * @param	bool
-	 * @return	string
+	 * @param string $key
+	 * @param string $path
+	 * @return ViewsInterface
 	 */
-	public function parse_string(string $templateStr, array $data = [], bool $return = false): string
+	public function addView(string $key, string $path): ViewsInterface
 	{
-		return $this->hbsRun($this->hbsParse($templateStr, false), $data, !$return);
+		$this->views[trim(strtolower($key), '/')] = '/' . trim($path, '/');
+
+		/* chain-able */
+		return $this;
+	}
+
+	public function getViews(): array
+	{
+		return (array)$this->views;
+	}
+
+	/**
+	 * data
+	 *
+	 * @param mixed $var
+	 * @param mixed $value
+	 * @return ViewsInterface
+	 */
+	public function data($key, $value = null): ViewsInterface
+	{
+		if (\is_array($key)) {
+			$this->data = $key;
+		} elseif (\is_string($key)) {
+			$this->data[$key] = $value;
+		}
+
+		/* chain-able */
+		return $this;
+	}
+
+	/**
+	 * getData
+	 *
+	 * @param string $key
+	 * @return mixed
+	 */
+	public function getData(string $key = null)
+	{
+		$data = null;
+
+		if ($key) {
+			if (isset($this->data[$key])) {
+				$data = $this->data[$key];
+			}
+		} else {
+			$data = $this->data;
+		}
+
+		return $data;
+	}
+
+	/**
+	 * clearData
+	 *
+	 * @return ViewsInterface
+	 */
+	public function clearData(): ViewsInterface
+	{
+		$this->data = [];
+
+		/* chain-able */
+		return $this;
 	}
 
 	/*
@@ -133,222 +175,40 @@ class Handlebars
 	* @param string
 	* @return object (this)
 	*/
-	public function set_delimiters(/* string|array */$l = '{{', string $r = '}}'): Handlebars
+	public function setDelimiters($l = '{{', string $r = '}}'): ViewsInterface
 	{
-		/* set delimiters */
-		$this->config['delimiters'] = (is_array($l)) ? $l : [$l, $r];
+		$this->viewCompiler->setDelimiters($l, $r);
 
 		/* chain-able */
 		return $this;
 	}
 
-	/* handlebars library specific methods */
-
-	/**
-	 * heavy lifter - wrapper for lightncandy https://github.com/zordius/lightncandy handlebars compiler
-	 *
-	 * returns raw compiled_php as string or prepared (executable) php
-	 *
-	 * @param string
-	 * @param string
-	 * @param boolean
-	 * @return string / closure
-	 */
-	public function compile(string $templateSource, string $comment = ''): string
-	{
-		/* Get our helpers if they aren't already loaded */
-		$this->loadHelpers();
-
-		/* Compile it into php magic! Thank you zordius https://github.com/zordius/lightncandy */
-		return LightnCandy::compile($templateSource, [
-			'flags' => $this->config['flags'], /* compiler flags */
-			'helpers' => $this->plugins, /* Add the plugins (handlebars.js calls helpers) */
-			'renderex' => '/* ' . $comment . ' compiled @ ' . date('Y-m-d h:i:s e') . ' */', /* Added to compiled PHP */
-			'delimiters' => $this->config['delimiters'],
-			'partialresolver' => function ($context, $name) { /* partial & template handling */
-				/* Try if it's a partial, template or insert as html comment */
-				try {
-					$template = $this->findPartial($name);
-				} catch(Exception $e) {
-					try {
-						$template = $this->fileGetContents($this->findTemplate($name));
-					} catch (Exception $e) {
-						$template = '<!-- partial named "' . $name . '" could not found --!>';
-					}
-				}
-
-				return $template;
-			},
-		]);
-	}
-
-	/* search all php include paths for a template file
-	* findTemplate(/view/template_folder/handle_bars.tmpl);
-	*
-	* @param string
-	* @return vold/string
-	*/
-	public function findTemplate(string $name): string
-	{
-		/* ci('servicelocator')->find(...) will throw an error if it's not found */
-		return ci('servicelocator')->find($this->config['templateServiceType'],$name);
-	}
-
-	public function findPartial(string $name): string
+	public function getView(string $name): string
 	{
 		$name = strtolower($name);
 
-		if (!isset($this->partials[$name])) {
-			throw new Exception('Could not locate partial named '.$name.'.');
+		if (!isset($this->views[$name])) {
+			throw new Exception('View Not Found ' . $name);
 		}
 
-		return $this->partials[$name];
+		return $this->views[$name];
 	}
 
-	/*
-	* save a compiled file
-	*
-	* @param string
-	* @param string
-	* @return boolean
-	*/
-	public function saveCompileFile(string $compiledFile, string $templatePhp): int
+	public function addPlugin(string $name, Closure $closure): ViewsInterface
 	{
-		/* write out the compiled file */
-		return \atomic_file_put_contents($compiledFile, '<?php ' . $templatePhp . '?>');
+		$this->pluginCompiler->addPlugin($name, $closure);
+
+		/* chain-able */
+		return $this;
 	}
 
-	/**
-	 * hbsParse
-	 *
-	 * @param string $template
-	 * @param bool $isFile
-	 * @return void
-	 */
-	public function hbsParse(string $template, bool $isFile): string
+	public function addPlugins(array $plugins): ViewsInterface
 	{
-		/* build the compiled file path */
-		$compiledFile = $this->config['cacheFolder'] . '/' . md5($template) . '.php';
-
-		/* always compile in development or not save or compile if doesn't exist */
-		if ($this->config['forceCompile'] || !file_exists($compiledFile)) {
-			/* compile the template as either file or string */
-			if ($isFile) {
-				$source = $this->fileGetContents($this->findTemplate($template));
-				$comment = $template;
-			} else {
-				$source = $template;
-				$comment = 'parse_string_' . md5($template);
-			}
-
-			$this->saveCompileFile($compiledFile, $this->compile($source, $comment));
+		foreach ($plugins as $name => $closure) {
+			$this->addPlugin($name, $closure);
 		}
 
-		return $compiledFile;
+		/* chain-able */
+		return $this;
 	}
-
-	/**
-	 * hbsRun
-	 *
-	 * @param string $compiledFile
-	 * @param array $data
-	 * @param bool $appendOutput
-	 * @return void
-	 */
-	public function hbsRun(string $compiledFile, array $data, bool $appendOutput): string
-	{
-		/* did we find this template? */
-		if (!file_exists($compiledFile)) {
-			/* nope! - fatal error! */
-			throw new Exception('Could not locate compiled handlebars file ' . $compiledFile);
-		}
-
-		/* yes include it */
-		$templatePHP = include $compiledFile;
-
-		/* is what we loaded even executable? */
-		if (!is_callable($templatePHP)) {
-			throw new Exception('Could not execute template');
-		}
-
-		/* send data into the magic void... */
-		$output = $templatePHP($data);
-
-		/* Should we append to output? */
-		if ($appendOutput) {
-			ci('output')->append_output($output);
-		}
-
-		return $output;
-	}
-
-	/**
-	 * loadHelpers
-	 *
-	 * @return void
-	 */
-	protected function loadHelpers(): void
-	{
-		$cacheFile = $this->config['cacheFolder'] . '/handlebar.helpers.php';
-
-		if ($this->config['forceCompile'] || !file_exists($cacheFile)) {
-			$combined  = '<?php' . PHP_EOL . '/*' . PHP_EOL . 'DO NOT MODIFY THIS FILE' . PHP_EOL . 'Written: ' . date('Y-m-d H:i:s T') . PHP_EOL . '*/' . PHP_EOL . PHP_EOL;
-
-			$plugins = ci('config')->item('services.'.$this->config['pluginServiceType']);
-
-			/* find all of the plugin "services" */
-			if (\is_array($plugins)) {
-				foreach ($plugins as $service => $path) {
-					$pluginSource  = php_strip_whitespace(__ROOT__.$path);
-					$pluginSource  = trim(str_replace(['<?php', '<?','?>'],'',$pluginSource));
-					$pluginSource  = trim('/* ' . $path . ' */'.PHP_EOL.$pluginSource).PHP_EOL.PHP_EOL;
-
-					$combined .= $pluginSource;
-				}
-			}
-
-			/* save to the cache folder on this machine (in a multi-machine env each will just recreate this locally) */
-			\atomic_file_put_contents($cacheFile, trim($combined));
-		}
-
-		/* start with empty array */
-		$helpers = [];
-
-		/* include the combined "cache" file */
-		include $cacheFile;
-
-		/* assign it to the class property directly attached over loaded */
-		$this->plugins = array_replace($helpers,$this->plugins);
-	}
-
-	/**
-	 * fileGetContents
-	 *
-	 * @param string $file
-	 * @return void
-	 */
-	protected function fileGetContents(string $file): string
-	{
-		$absolutePath = __ROOT__ . $file;
-
-		if (!\file_exists($absolutePath)) {
-			throw new Exception('Can not location the file "' . $absolutePath . '".');
-		}
-
-		return \file_get_contents($absolutePath);
-	}
-
-	public function makeCacheFolder(string $folder): void
-	{
-		/* let's make sure the compile folder is there before we try to save the compiled file! */
-		if (!\file_exists($folder)) {
-			mkdir($folder, 0755, true);
-		}
-
-		/* is the folder writable by us? */
-		if (!\is_writable($folder)) {
-			throw new Exception('Cannot write to folder ' . $folder);
-		}
-	}
-
 } /* end class */

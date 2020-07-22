@@ -4,9 +4,11 @@ namespace Handlebars;
 
 use Closure;
 
-class Add {
+class Add
+{
+	protected $config = [];
+
 	protected $parent;
-	protected $config;
 	protected $partials;
 	protected $plugins;
 
@@ -19,12 +21,13 @@ class Add {
 	 * @param mixed &$plugins
 	 * @return void
 	 */
-	public function __construct(handlebars &$parent,array &$config,array &$partials,array &$plugins)
+	public function __construct(array $config)
 	{
-		$this->parent = &$parent;
-		$this->config = &$config;
-		$this->partials = &$partials;
-		$this->plugins = &$plugins;
+		$this->config = $config;
+
+		$this->parent = $config['handlebars'];
+		$this->partials = $config['partials'];
+		$this->plugins = $config['plugins'];
 	}
 
 	/*
@@ -34,12 +37,13 @@ class Add {
 	* @param string
 	* @return object (this)
 	*/
-	public function partials(array $partials) : handlebars
+	public function partials(array $partials): handlebars
 	{
-		foreach ($partials as $name=>$template) {
-			$this->partial($name,$template);
+		foreach ($partials as $name => $template) {
+			$this->partial($name, $template);
 		}
 
+		/* chain-able */
 		return $this->parent;
 	}
 
@@ -50,7 +54,7 @@ class Add {
 	 * @param string $template
 	 * @return void
 	 */
-	public function partial(string $name,string $template) : handlebars
+	public function partial(string $name, string $template): handlebars
 	{
 		$this->partials[strtolower($name)] = $template;
 
@@ -64,12 +68,13 @@ class Add {
 	 * @param array $templates
 	 * @return void
 	 */
-	public function templates(array $templates) : handlebars
+	public function templates(array $templates): handlebars
 	{
-		foreach ($templates as $name=>$path) {
-			$this->template($name,$path);
+		foreach ($templates as $name => $path) {
+			$this->template($name, $path);
 		}
 
+		/* chain-able */
 		return $this->parent;
 	}
 
@@ -80,10 +85,9 @@ class Add {
 	 * @param string $template
 	 * @return void
 	 */
-	public function template(string $name,string $path) : handlebars
+	public function template(string $name, string $path): handlebars
 	{
-		ci('servicelocator')->add($this->config['templateServiceType'],$name,$path);
-
+		ci('servicelocator')->add($this->config['templateServiceType'], $name, $path);
 
 		/* chain-able */
 		return $this->parent;
@@ -96,10 +100,10 @@ class Add {
 	* @param string
 	* @return object (this)
 	*/
-	public function plugins(array $plugins) : handlebars
+	public function plugins(array $plugins): handlebars
 	{
-		foreach ($plugins as $name=>$closure) {
-			$this->plugin($name,$closure);
+		foreach ($plugins as $name => $closure) {
+			$this->plugin($name, $closure);
 		}
 
 		return $this->parent;
@@ -112,12 +116,11 @@ class Add {
 	 * @param Closure $closure
 	 * @return void
 	 */
-	public function plugin(string $name,Closure $closure) : handlebars
+	public function plugin(string $name, Closure $closure): handlebars
 	{
 		$this->plugins[$name] = $closure;
 
 		/* chain-able */
 		return $this->parent;
 	}
-
 } /* end class */
