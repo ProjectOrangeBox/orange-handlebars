@@ -50,8 +50,6 @@ use projectorangebox\views\ViewsInterface;
 
 class Handlebars implements ViewsInterface
 {
-	protected $config = [];
-
 	protected $views = [];
 	protected $data = [];
 
@@ -67,21 +65,16 @@ class Handlebars implements ViewsInterface
 	 */
 	public function __construct(array $config = [])
 	{
-		$defaultConfig = [
-			'views' => [], /* must come in ['name'=>'path'] */
-			'data' => [],
-		];
+		$this->views = $config['views'] ?? [];
 
-		$this->config = \array_replace($defaultConfig, $config);
-
-		$this->views = $this->config['views'];
-
-		$this->data = $this->config['data'];
+		if (is_array($config['data'])) {
+			$this->data = $config['data'];
+		}
 
 		/* my classes */
-		$this->pluginCompiler = new PluginCompiler($this->config);
+		$this->pluginCompiler = new PluginCompiler($config);
 
-		$this->viewCompiler = new ViewCompiler($this->config, $this->pluginCompiler, $this);
+		$this->viewCompiler = new ViewCompiler($config, $this->pluginCompiler, $this);
 	}
 
 	public function render(string $key, array $data = null): string
@@ -191,7 +184,13 @@ class Handlebars implements ViewsInterface
 			throw new Exception('View Not Found ' . $name);
 		}
 
-		return $this->views[$name];
+		$file = $this->views[$name];
+
+		if (!\FS::file_exists($file)) {
+			throw new Exception('View File Not Found ' . $this->views[$file]);
+		}
+
+		return $file;
 	}
 
 	public function addPlugin(string $name, Closure $closure): ViewsInterface
